@@ -2,9 +2,17 @@ import hashlib
 import secrets
 import json
 import uuid
+from bfcm_v2_helper import seed_events
 
-def list_events():
-    
+def save_events(events):
+
+    with open("event_log.json", "w") as f:
+
+        for event in events:
+            f.write(json.dumps(event) + "\n")
+
+def load_events():
+
     events = []
 
     with open("event_log.json", "r") as f:
@@ -12,11 +20,18 @@ def list_events():
             event = json.loads(line)
             events.append(event)
 
+    return events
+
+def list_events():
+    
+    events = load_events()
+
     print("\nAvailable Events:\n")
 
     for event in events:
         print(f'{event["event_id"]}: '
-              f'{event["question"]}')
+              f'{event["question"]}'
+              f'{event["status"]}')
 
     return events
 
@@ -28,7 +43,7 @@ def choose_event():
 
     for event in events:
 
-        if event["event_id"] == chosen_id:
+        if event["event_id"] == chosen_id and event["status"] == "OPEN":
             return event
 
     print("Invalid event selected.")
@@ -36,10 +51,36 @@ def choose_event():
 
 def create_event(event_id, content):
     event_data = {"event_id": event_id,
-                  "question": content}
+                  "question": content,
+                  "status": "OPEN"}
     
     with open("event_log.json", "a") as f:
         f.write(json.dumps(event_data) + "\n")
+
+def resolve_event(event_id, outcome):
+
+    events = load_events()
+
+    for event in events:
+
+        if event["event_id"] == event_id:
+
+            if event["status"] != "OPEN":
+                print("Event already resolved.")
+                return False
+
+            event["status"] = "RESOLVED"
+            event["outcome"] = outcome
+
+            save_events(events)
+
+            print(f'Event {event_id} '
+                  f'Resolved as {outcome}')
+
+            return True
+
+    print("Event not found.")
+    return False
 
 def get_user_input():
     event = choose_event()
@@ -118,8 +159,50 @@ def verify(prediction_id):
     else:
         print("Verification Invalid")
         return False
-    
+
+def reveal_prediction(prediction_id):
+
+    with open("predictions_private.json", "r") as f:
+
+        for line in f:
+
+            reveal_data = json.loads(line)
+
+            if reveal_data["prediction_id"] == prediction_id:
+
+                print("\n--- REVEAL ---")
+
+                print(
+                    f'Prediction ID: '
+                    f'{reveal_data["prediction_id"]}'
+                )
+
+                print(
+                    f'Event ID: '
+                    f'{reveal_data["event_id"]}'
+                )
+
+                print(
+                    f'Prediction: '
+                    f'{reveal_data["prediction"]}'
+                )
+
+                print(
+                    f'Nonce: '
+                    f'{reveal_data["nonce"]}'
+                )
+
+                print("----------------\n")
+
+                return reveal_data
+
+    print("Prediction not found.")
+    return None
+                
 def main():
+
+    seed_events()
+
     event_id, prediction = get_user_input()
 
     nonce = generate_nonce()
@@ -133,6 +216,10 @@ def main():
     save_prediction_public(prediction_id, event_id, commitment)
 
     save_prediction_private(prediction_id, event_id, nonce, prediction)
+
+    resolve_event(event_id, prediction)
+
+    reveal_prediction(prediction_id)
 
     verify(prediction_id)
 
